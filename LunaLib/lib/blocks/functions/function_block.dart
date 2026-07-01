@@ -365,7 +365,7 @@ class FunctionBlock extends BlockInstance {
           final normalizedInput = input.replaceAll(',', '.');
 
           // Parse the expression
-          final parser = ShuntingYardParser();
+          final parser = Parser();
           final expression = parser.parse(normalizedInput);
 
           // Evaluate the expression
