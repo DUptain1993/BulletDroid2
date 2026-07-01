@@ -37,6 +37,7 @@ export 'blocks/logic/function_block.dart';
 export 'blocks/utility/loli_code_block.dart';
 
 export 'utils/config_loader.dart';
+export 'utils/opk_loader.dart';
 
 /// Main LunaLib class
 class LunaLib {

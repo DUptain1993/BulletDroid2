@@ -117,6 +117,91 @@ class ConfigSettings {
     return settings;
   }
 
+  /// Create ConfigSettings from an OpenBullet 2 `settings.json` (nested format)
+  /// plus its accompanying `metadata.json`, as found inside an .opk package.
+  factory ConfigSettings.fromOpenBullet2Json(
+    Map<String, dynamic> settingsJson, {
+    Map<String, dynamic>? metadataJson,
+  }) {
+    final settings = ConfigSettings();
+
+    if (metadataJson != null) {
+      settings.name = metadataJson['Name'] ?? '';
+      settings.author = metadataJson['Author'] ?? '';
+      if (metadataJson['LastModified'] != null) {
+        try {
+          settings.lastModified = DateTime.parse(metadataJson['LastModified']);
+        } catch (e) {
+          // Ignore error
+        }
+      }
+      if (metadataJson['Plugins'] != null) {
+        settings.requiredPlugins = List<String>.from(metadataJson['Plugins']);
+      }
+    }
+
+    final general = settingsJson['GeneralSettings'] as Map<String, dynamic>?;
+    if (general != null) {
+      settings.suggestedBots = general['SuggestedBots'] ?? 1;
+      settings.maxCPM = general['MaximumCPM'] ?? 0;
+      settings.saveEmptyCaptures = general['SaveEmptyCaptures'] ?? false;
+      if (general['ContinueStatuses'] != null) {
+        final continueStatuses = List<String>.from(
+          general['ContinueStatuses'],
+        );
+        settings.continueOnCustom = continueStatuses.any(
+          (status) => status.toUpperCase() == 'CUSTOM',
+        );
+      }
+    }
+
+    final proxy = settingsJson['ProxySettings'] as Map<String, dynamic>?;
+    if (proxy != null) {
+      settings.needsProxies = proxy['UseProxies'] ?? false;
+      settings.maxProxyUses = proxy['MaxUsesPerProxy'] ?? 0;
+      settings.banLoopEvasionOverride = proxy['BanLoopEvasion'] ?? -1;
+      if (proxy['AllowedProxyTypes'] != null) {
+        final allowedTypes = List<String>.from(
+          proxy['AllowedProxyTypes'],
+        ).map((t) => t.toUpperCase());
+        settings.onlySocks =
+            allowedTypes.isNotEmpty &&
+            !allowedTypes.any((t) => t == 'HTTP' || t == 'HTTPS');
+      }
+    }
+
+    final data = settingsJson['DataSettings'] as Map<String, dynamic>?;
+    if (data != null) {
+      settings.encodeData = data['UrlEncodeDataAfterSlicing'] ?? false;
+      if (data['AllowedWordlistTypes'] != null) {
+        final allowedWordlists = List<String>.from(
+          data['AllowedWordlistTypes'],
+        );
+        if (allowedWordlists.isNotEmpty) {
+          settings.allowedWordlist1 = allowedWordlists[0];
+        }
+        if (allowedWordlists.length > 1) {
+          settings.allowedWordlist2 = allowedWordlists[1];
+        }
+      }
+    }
+
+    final input = settingsJson['InputSettings'] as Map<String, dynamic>?;
+    if (input != null && input['CustomInputs'] != null) {
+      settings.customInputs = (input['CustomInputs'] as List)
+          .map(
+            (json) => CustomInput(
+              variableName: json['VariableName'] ?? '',
+              description: json['Description'] ?? '',
+              value: json['DefaultAnswer'] ?? '',
+            ),
+          )
+          .toList();
+    }
+
+    return settings;
+  }
+
   /// Convert to JSON for serialization
   Map<String, dynamic> toJson() {
     return {
