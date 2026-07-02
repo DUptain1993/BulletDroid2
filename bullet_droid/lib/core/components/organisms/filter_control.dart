@@ -445,7 +445,7 @@ class _FilterControlState extends State<FilterControl> {
             });
             filter.onChanged?.call(value);
           },
-          activeColor: theme.colorScheme.primary,
+          activeThumbColor: theme.colorScheme.primary,
         );
 
       case FilterType.dropdown:

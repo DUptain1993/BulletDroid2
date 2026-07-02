@@ -786,7 +786,7 @@ class _BlocksSectionState extends ConsumerState<_BlocksSection> {
               Switch(
                 value: _isEditMode,
                 onChanged: (_) => _toggleEditMode(),
-                activeColor: GeistColors.black,
+                activeThumbColor: GeistColors.black,
                 inactiveThumbColor: GeistColors.gray400,
                 inactiveTrackColor: GeistColors.gray200,
               ),
