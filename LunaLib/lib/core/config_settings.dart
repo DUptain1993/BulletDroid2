@@ -1,3 +1,41 @@
+/// Coerce a dynamic JSON value into a String, tolerating producers that
+/// serialize the field as a number, bool, etc. instead of a string.
+String _asString(dynamic value, [String fallback = '']) {
+  if (value == null) return fallback;
+  if (value is String) return value;
+  return value.toString();
+}
+
+/// Coerce a dynamic JSON value into an int, tolerating numeric strings.
+int _asInt(dynamic value, [int fallback = 0]) {
+  if (value is int) return value;
+  if (value is num) return value.toInt();
+  if (value is String) return int.tryParse(value) ?? fallback;
+  return fallback;
+}
+
+/// Coerce a dynamic JSON value into a bool.
+bool _asBool(dynamic value, [bool fallback = false]) {
+  if (value is bool) return value;
+  if (value is String) return value.toLowerCase() == 'true';
+  if (value is num) return value != 0;
+  return fallback;
+}
+
+/// Coerce a dynamic JSON value into a List<String>, stringifying any
+/// non-string elements rather than throwing.
+List<String> _asStringList(dynamic value) {
+  if (value is! List) return [];
+  return value.map((e) => _asString(e)).toList();
+}
+
+/// Coerce a dynamic JSON value into a Map<String, dynamic>, or null if it
+/// isn't map-shaped.
+Map<String, dynamic>? _asMap(dynamic value) {
+  if (value is Map) return Map<String, dynamic>.from(value);
+  return null;
+}
+
 /// Represents the complete settings for a LunaLib config
 class ConfigSettings {
   // General settings
@@ -48,77 +86,126 @@ class ConfigSettings {
   ConfigSettings();
 
   /// Create ConfigSettings from OpenBullet Legacy JSON
+  ///
+  /// Values are coerced defensively instead of cast, and each section is
+  /// wrapped independently so a single malformed/mistyped field (e.g. a
+  /// number where a string was expected) can't abort the whole parse.
   factory ConfigSettings.fromLegacyJson(Map<String, dynamic> json) {
     final settings = ConfigSettings();
 
-    // General settings
-    settings.name = json['Name'] ?? '';
-    settings.author = json['Author'] ?? '';
-    settings.version = json['Version'] ?? '';
-    settings.suggestedBots = json['SuggestedBots'] ?? 1;
-    settings.maxCPM = json['MaxCPM'] ?? 0;
-    settings.additionalInfo = json['AdditionalInfo'] ?? '';
-    settings.saveEmptyCaptures = json['SaveEmptyCaptures'] ?? false;
-    settings.continueOnCustom = json['ContinueOnCustom'] ?? false;
-    settings.saveHitsToTextFile = json['SaveHitsToTextFile'] ?? false;
+    try {
+      // General settings
+      settings.name = _asString(json['Name']);
+      settings.author = _asString(json['Author']);
+      settings.version = _asString(json['Version']);
+      settings.suggestedBots = _asInt(json['SuggestedBots'], 1);
+      settings.maxCPM = _asInt(json['MaxCPM']);
+      settings.additionalInfo = _asString(json['AdditionalInfo']);
+      settings.saveEmptyCaptures = _asBool(json['SaveEmptyCaptures']);
+      settings.continueOnCustom = _asBool(json['ContinueOnCustom']);
+      settings.saveHitsToTextFile = _asBool(json['SaveHitsToTextFile']);
 
-    if (json['LastModified'] != null) {
-      try {
-        settings.lastModified = DateTime.parse(json['LastModified']);
-      } catch (e) {
-        // Ignore error
+      if (json['LastModified'] != null) {
+        try {
+          settings.lastModified = DateTime.parse(_asString(json['LastModified']));
+        } catch (e) {
+          // Ignore error
+        }
       }
+
+      settings.requiredPlugins = _asStringList(json['RequiredPlugins']);
+    } catch (e) {
+      // Ignore malformed general fields
     }
 
-    if (json['RequiredPlugins'] != null) {
-      settings.requiredPlugins = List<String>.from(json['RequiredPlugins']);
+    try {
+      // Request settings
+      settings.ignoreResponseErrors = _asBool(json['IgnoreResponseErrors']);
+      settings.maxRedirects = _asInt(json['MaxRedirects'], 8);
+
+      // Proxy settings
+      settings.needsProxies = _asBool(json['NeedsProxies']);
+      settings.onlySocks = _asBool(json['OnlySocks']);
+      settings.onlySsl = _asBool(json['OnlySsl']);
+      settings.maxProxyUses = _asInt(json['MaxProxyUses']);
+      settings.banProxyAfterGoodStatus = _asBool(
+        json['BanProxyAfterGoodStatus'],
+      );
+      settings.banLoopEvasionOverride = _asInt(
+        json['BanLoopEvasionOverride'],
+        -1,
+      );
+    } catch (e) {
+      // Ignore malformed request/proxy fields
     }
 
-    // Request settings
-    settings.ignoreResponseErrors = json['IgnoreResponseErrors'] ?? false;
-    settings.maxRedirects = json['MaxRedirects'] ?? 8;
+    try {
+      // Data settings
+      settings.encodeData = _asBool(json['EncodeData']);
+      settings.allowedWordlist1 = _asString(json['AllowedWordlist1']);
+      settings.allowedWordlist2 = _asString(json['AllowedWordlist2']);
 
-    // Proxy settings
-    settings.needsProxies = json['NeedsProxies'] ?? false;
-    settings.onlySocks = json['OnlySocks'] ?? false;
-    settings.onlySsl = json['OnlySsl'] ?? false;
-    settings.maxProxyUses = json['MaxProxyUses'] ?? 0;
-    settings.banProxyAfterGoodStatus = json['BanProxyAfterGoodStatus'] ?? false;
-    settings.banLoopEvasionOverride = json['BanLoopEvasionOverride'] ?? -1;
-
-    // Data settings
-    settings.encodeData = json['EncodeData'] ?? false;
-    settings.allowedWordlist1 = json['AllowedWordlist1'] ?? '';
-    settings.allowedWordlist2 = json['AllowedWordlist2'] ?? '';
-
-    if (json['DataRules'] != null) {
-      settings.dataRules = (json['DataRules'] as List)
-          .map((rule) => DataRule.fromJson(rule))
-          .toList();
+      if (json['DataRules'] is List) {
+        final dataRules = <DataRule>[];
+        for (final rule in json['DataRules'] as List) {
+          try {
+            final ruleMap = _asMap(rule);
+            if (ruleMap != null) dataRules.add(DataRule.fromJson(ruleMap));
+          } catch (e) {
+            // Skip malformed data rule entries
+          }
+        }
+        settings.dataRules = dataRules;
+      }
+    } catch (e) {
+      // Ignore malformed data settings fields
     }
 
-    // Custom inputs
-    if (json['CustomInputs'] != null) {
-      settings.customInputs = (json['CustomInputs'] as List)
-          .map((input) => CustomInput.fromJson(input))
-          .toList();
+    try {
+      // Custom inputs
+      if (json['CustomInputs'] is List) {
+        final customInputs = <CustomInput>[];
+        for (final input in json['CustomInputs'] as List) {
+          try {
+            final inputMap = _asMap(input);
+            if (inputMap != null) {
+              customInputs.add(CustomInput.fromJson(inputMap));
+            }
+          } catch (e) {
+            // Skip malformed custom input entries
+          }
+        }
+        settings.customInputs = customInputs;
+      }
+    } catch (e) {
+      // Ignore malformed custom inputs
     }
 
-    // Selenium settings
-    settings.forceHeadless = json['ForceHeadless'] ?? false;
-    settings.alwaysOpen = json['AlwaysOpen'] ?? false;
-    settings.alwaysQuit = json['AlwaysQuit'] ?? false;
-    settings.quitOnBanRetry = json['QuitOnBanRetry'] ?? false;
-    settings.disableNotifications = json['DisableNotifications'] ?? false;
-    settings.customUserAgent = json['CustomUserAgent'] ?? '';
-    settings.randomUA = json['RandomUA'] ?? false;
-    settings.customCMDArgs = json['CustomCMDArgs'] ?? '';
+    try {
+      // Selenium settings
+      settings.forceHeadless = _asBool(json['ForceHeadless']);
+      settings.alwaysOpen = _asBool(json['AlwaysOpen']);
+      settings.alwaysQuit = _asBool(json['AlwaysQuit']);
+      settings.quitOnBanRetry = _asBool(json['QuitOnBanRetry']);
+      settings.disableNotifications = _asBool(json['DisableNotifications']);
+      settings.customUserAgent = _asString(json['CustomUserAgent']);
+      settings.randomUA = _asBool(json['RandomUA']);
+      settings.customCMDArgs = _asString(json['CustomCMDArgs']);
+    } catch (e) {
+      // Ignore malformed selenium fields
+    }
 
     return settings;
   }
 
   /// Create ConfigSettings from an OpenBullet 2 `settings.json` (nested format)
   /// plus its accompanying `metadata.json`, as found inside an .opk package.
+  ///
+  /// Real-world .opk files are not guaranteed to match RuriLib's shape
+  /// exactly (hand-edited files, tools that mis-serialize fields, etc.), so
+  /// every value is coerced defensively instead of cast, and each section is
+  /// parsed independently so a single malformed field can't blow up the
+  /// whole config load.
   factory ConfigSettings.fromOpenBullet2Json(
     Map<String, dynamic> settingsJson, {
     Map<String, dynamic>? metadataJson,
@@ -126,77 +213,94 @@ class ConfigSettings {
     final settings = ConfigSettings();
 
     if (metadataJson != null) {
-      settings.name = metadataJson['Name'] ?? '';
-      settings.author = metadataJson['Author'] ?? '';
-      if (metadataJson['LastModified'] != null) {
-        try {
-          settings.lastModified = DateTime.parse(metadataJson['LastModified']);
-        } catch (e) {
-          // Ignore error
+      try {
+        settings.name = _asString(metadataJson['Name']);
+        settings.author = _asString(metadataJson['Author']);
+        if (metadataJson['LastModified'] != null) {
+          try {
+            settings.lastModified = DateTime.parse(
+              _asString(metadataJson['LastModified']),
+            );
+          } catch (e) {
+            // Ignore error
+          }
         }
-      }
-      if (metadataJson['Plugins'] != null) {
-        settings.requiredPlugins = List<String>.from(metadataJson['Plugins']);
+        settings.requiredPlugins = _asStringList(metadataJson['Plugins']);
+      } catch (e) {
+        // Ignore malformed metadata.json fields
       }
     }
 
-    final general = settingsJson['GeneralSettings'] as Map<String, dynamic>?;
+    final general = _asMap(settingsJson['GeneralSettings']);
     if (general != null) {
-      settings.suggestedBots = general['SuggestedBots'] ?? 1;
-      settings.maxCPM = general['MaximumCPM'] ?? 0;
-      settings.saveEmptyCaptures = general['SaveEmptyCaptures'] ?? false;
-      if (general['ContinueStatuses'] != null) {
-        final continueStatuses = List<String>.from(
-          general['ContinueStatuses'],
-        );
+      try {
+        settings.suggestedBots = _asInt(general['SuggestedBots'], 1);
+        settings.maxCPM = _asInt(general['MaximumCPM']);
+        settings.saveEmptyCaptures = _asBool(general['SaveEmptyCaptures']);
+        final continueStatuses = _asStringList(general['ContinueStatuses']);
         settings.continueOnCustom = continueStatuses.any(
           (status) => status.toUpperCase() == 'CUSTOM',
         );
+      } catch (e) {
+        // Ignore malformed GeneralSettings fields
       }
     }
 
-    final proxy = settingsJson['ProxySettings'] as Map<String, dynamic>?;
+    final proxy = _asMap(settingsJson['ProxySettings']);
     if (proxy != null) {
-      settings.needsProxies = proxy['UseProxies'] ?? false;
-      settings.maxProxyUses = proxy['MaxUsesPerProxy'] ?? 0;
-      settings.banLoopEvasionOverride = proxy['BanLoopEvasion'] ?? -1;
-      if (proxy['AllowedProxyTypes'] != null) {
-        final allowedTypes = List<String>.from(
+      try {
+        settings.needsProxies = _asBool(proxy['UseProxies']);
+        settings.maxProxyUses = _asInt(proxy['MaxUsesPerProxy']);
+        settings.banLoopEvasionOverride = _asInt(
+          proxy['BanLoopEvasion'],
+          -1,
+        );
+        final allowedTypes = _asStringList(
           proxy['AllowedProxyTypes'],
         ).map((t) => t.toUpperCase());
         settings.onlySocks =
             allowedTypes.isNotEmpty &&
             !allowedTypes.any((t) => t == 'HTTP' || t == 'HTTPS');
+      } catch (e) {
+        // Ignore malformed ProxySettings fields
       }
     }
 
-    final data = settingsJson['DataSettings'] as Map<String, dynamic>?;
+    final data = _asMap(settingsJson['DataSettings']);
     if (data != null) {
-      settings.encodeData = data['UrlEncodeDataAfterSlicing'] ?? false;
-      if (data['AllowedWordlistTypes'] != null) {
-        final allowedWordlists = List<String>.from(
-          data['AllowedWordlistTypes'],
-        );
+      try {
+        settings.encodeData = _asBool(data['UrlEncodeDataAfterSlicing']);
+        final allowedWordlists = _asStringList(data['AllowedWordlistTypes']);
         if (allowedWordlists.isNotEmpty) {
           settings.allowedWordlist1 = allowedWordlists[0];
         }
         if (allowedWordlists.length > 1) {
           settings.allowedWordlist2 = allowedWordlists[1];
         }
+      } catch (e) {
+        // Ignore malformed DataSettings fields
       }
     }
 
-    final input = settingsJson['InputSettings'] as Map<String, dynamic>?;
-    if (input != null && input['CustomInputs'] != null) {
-      settings.customInputs = (input['CustomInputs'] as List)
-          .map(
-            (json) => CustomInput(
-              variableName: json['VariableName'] ?? '',
-              description: json['Description'] ?? '',
-              value: json['DefaultAnswer'] ?? '',
+    final input = _asMap(settingsJson['InputSettings']);
+    if (input != null && input['CustomInputs'] is List) {
+      final customInputs = <CustomInput>[];
+      for (final entry in input['CustomInputs'] as List) {
+        try {
+          final entryMap = _asMap(entry);
+          if (entryMap == null) continue;
+          customInputs.add(
+            CustomInput(
+              variableName: _asString(entryMap['VariableName']),
+              description: _asString(entryMap['Description']),
+              value: _asString(entryMap['DefaultAnswer']),
             ),
-          )
-          .toList();
+          );
+        } catch (e) {
+          // Skip malformed custom input entries
+        }
+      }
+      settings.customInputs = customInputs;
     }
 
     return settings;

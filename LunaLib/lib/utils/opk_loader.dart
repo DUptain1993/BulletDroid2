@@ -116,17 +116,17 @@ class OpkLoader {
       settings.additionalInfo = description;
     }
 
-    final metadataName = metadataJson?['Name'] as String?;
+    final metadataName = _stringOrNull(metadataJson?['Name']);
     final name = (metadataName != null && metadataName.isNotEmpty)
         ? metadataName
         : (settings.name.isNotEmpty ? settings.name : 'Imported Config');
 
-    final metadataAuthor = metadataJson?['Author'] as String?;
+    final metadataAuthor = _stringOrNull(metadataJson?['Author']);
     final author = (metadataAuthor != null && metadataAuthor.isNotEmpty)
         ? metadataAuthor
         : settings.author;
 
-    final category = (metadataJson?['Category'] as String?) ?? 'OpenBullet2';
+    final category = _stringOrNull(metadataJson?['Category']) ?? 'OpenBullet2';
 
     final metadata = ConfigMetadata(
       name: name,
@@ -210,4 +210,12 @@ class OpkLoader {
   }
 
   static String _readText(ArchiveFile file) => utf8.decode(_bytesOf(file));
+
+  /// Coerce a dynamic JSON value into a String, tolerating producers that
+  /// serialize the field as a number, bool, etc. instead of a string.
+  static String? _stringOrNull(dynamic value) {
+    if (value == null) return null;
+    if (value is String) return value;
+    return value.toString();
+  }
 }
