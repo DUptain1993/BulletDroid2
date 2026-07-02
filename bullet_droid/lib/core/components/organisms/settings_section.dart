@@ -325,7 +325,7 @@ class _SettingsSectionState extends State<SettingsSection> {
                 onChanged: item.isEnabled
                     ? (value) => item.onChanged?.call(value)
                     : null,
-                activeColor: theme.colorScheme.primary,
+                activeThumbColor: theme.colorScheme.primary,
               ),
               SizedBox(width: GeistSpacing.sm),
               if (item.toggleLabel != null)

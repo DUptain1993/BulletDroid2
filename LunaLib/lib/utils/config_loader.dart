@@ -1,8 +1,11 @@
+import 'dart:convert';
+
 import '../core/config.dart';
 import '../core/config_settings.dart';
 import '../parsing/loli_parser.dart';
 import '../core/app_configuration.dart';
 import '../services/file_system_service.dart';
+import 'opk_loader.dart';
 
 /// Result of loading a config file with metadata
 class ConfigLoadResult {
@@ -40,11 +43,16 @@ class ConfigLoader {
     }
 
     try {
-      // Read file content
-      final content = await fileSystemService.readFile(filePath);
+      // .opk packages are zip archives; everything else is plain-text
+      // LoliScript. Sniff the magic bytes too, in case a .opk was renamed
+      // to .loli (or vice versa).
+      final bytes = await fileSystemService.readFileBytes(filePath);
+      if (OpkLoader.isOpkFile(filePath) || OpkLoader.looksLikeZip(bytes)) {
+        return OpkLoader.loadFromBytes(bytes);
+      }
 
       // Parse config using existing parser
-      return LoliParser.parseConfig(content);
+      return LoliParser.parseConfig(utf8.decode(bytes));
     } catch (e) {
       if (e.toString().contains('Permission denied')) {
         throw Exception('Permission denied: Cannot read file $filePath');

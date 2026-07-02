@@ -324,7 +324,7 @@ class SettingsScreen extends ConsumerWidget {
           Switch(
             value: value,
             onChanged: onChanged,
-            activeColor: GeistColors.blue,
+            activeThumbColor: GeistColors.blue,
           ),
         ],
       ),

@@ -39,7 +39,7 @@ Typical use cases span large‑scale data collection and extraction, robust resp
 
 ## Usage
 
-1. **Import Config** (.loli)
+1. **Import Config** (.loli or .opk)
 2. **Import Wordlist** (.txt)
 3. **Start Runner** -> select config/wordlist, set threads/proxies.
 4. **Monitor Execution** -> live CPM and per-bot status.
@@ -49,7 +49,7 @@ Typical use cases span large‑scale data collection and extraction, robust resp
 
 • Multi-threaded Runner UI backed by an isolate pool  
 • Live CPM, per-bot status, and crash-safe job recovery  
-• Config management and editing  
+• Config management and editing, with import support for both legacy `.loli` and OpenBullet2 `.opk` config packages  
 • CustomInputs support  
 • Hits DB with search, filters, and export  
 • Wordlist management with standard and custom wordlist types (regex and separator based parsing)  
@@ -182,7 +182,8 @@ Be kind. We follow the [Contributor Covenant](CODE_OF_CONDUCT.md). By participat
 ## Known Limitations
 
 • Foreground service and notifications are Android-only.  
-• iOS builds require configuration.
+• iOS builds require configuration.  
+• `.opk` configs that use OpenBullet2's C# script mode or a compiled DLL are not supported; only LoliCode/legacy LoliScript configs can be imported and run.
 
 ---
 

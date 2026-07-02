@@ -513,30 +513,37 @@ class _BlocksSectionState extends ConsumerState<_BlocksSection> {
       final configsNotifier = ref.read(configsProvider.notifier);
       final configs = ref.read(configsProvider).configs;
       final configSummary = configs.firstWhere((c) => c.id == widget.configId);
+      final file = File(configSummary.filePath);
 
-      final originalContent = await File(configSummary.filePath).readAsString();
+      // Generate the new script content with updated blocks (without metadata comments)
+      final newScript = _generateBlocksOnlyLoliCode();
 
-      final settingsStart = originalContent.indexOf('[SETTINGS]');
-      final scriptStart = originalContent.indexOf('[SCRIPT]');
+      if (OpkLoader.isOpkFile(configSummary.filePath)) {
+        final originalBytes = await file.readAsBytes();
+        final updatedBytes = OpkLoader.rewriteScript(originalBytes, newScript);
+        await file.writeAsBytes(updatedBytes);
+      } else {
+        final originalContent = await file.readAsString();
 
-      if (settingsStart == -1 || scriptStart == -1) {
-        throw Exception(
-          'Invalid .loli config format: missing [SETTINGS] or [SCRIPT] sections',
-        );
+        final settingsStart = originalContent.indexOf('[SETTINGS]');
+        final scriptStart = originalContent.indexOf('[SCRIPT]');
+
+        if (settingsStart == -1 || scriptStart == -1) {
+          throw Exception(
+            'Invalid .loli config format: missing [SETTINGS] or [SCRIPT] sections',
+          );
+        }
+
+        final settingsSection = originalContent
+            .substring(settingsStart, scriptStart)
+            .trim();
+
+        // Reconstruct the file content
+        final newContent = '$settingsSection\n\n[SCRIPT]\n$newScript';
+
+        // Write the updated content back to the file
+        await file.writeAsString(newContent);
       }
-
-      final settingsSection = originalContent
-          .substring(settingsStart, scriptStart)
-          .trim();
-
-      // Generate the new script section with updated blocks (without metadata comments)
-      final scriptSection = '[SCRIPT]\n${_generateBlocksOnlyLoliCode()}';
-
-      // Reconstruct the file content
-      final newContent = '$settingsSection\n\n$scriptSection';
-
-      // Write the updated content back to the file
-      await File(configSummary.filePath).writeAsString(newContent);
 
       // Reload configs to reflect changes throughout the app
       await configsNotifier.reloadConfigs();
@@ -779,7 +786,7 @@ class _BlocksSectionState extends ConsumerState<_BlocksSection> {
               Switch(
                 value: _isEditMode,
                 onChanged: (_) => _toggleEditMode(),
-                activeColor: GeistColors.black,
+                activeThumbColor: GeistColors.black,
                 inactiveThumbColor: GeistColors.gray400,
                 inactiveTrackColor: GeistColors.gray200,
               ),
@@ -1435,40 +1442,50 @@ class _CustomInputsTabState extends ConsumerState<_CustomInputsTab> {
     if (!mounted) return;
 
     try {
-      // Read the original file content to preserve the [SCRIPT] section
+      // Read the original file content to preserve the script section
       final configSummary = ref
           .read(configsProvider)
           .configs
           .firstWhere((c) => c.id == widget.configId);
 
-      final originalContent = await File(configSummary.filePath).readAsString();
+      final file = File(configSummary.filePath);
+      final updatedSettings = widget.config.settings.toJson();
 
       if (!mounted) return;
 
-      // Find the positions of [SETTINGS] and [SCRIPT]
-      final settingsStart = originalContent.indexOf('[SETTINGS]');
-      final scriptStart = originalContent.indexOf('[SCRIPT]');
-
-      if (settingsStart == -1 || scriptStart == -1) {
-        throw Exception(
-          'Invalid .loli config format: missing [SETTINGS] or [SCRIPT] sections',
+      if (OpkLoader.isOpkFile(configSummary.filePath)) {
+        final originalBytes = await file.readAsBytes();
+        final updatedBytes = OpkLoader.rewriteSettings(
+          originalBytes,
+          updatedSettings,
         );
+        await file.writeAsBytes(updatedBytes);
+      } else {
+        final originalContent = await file.readAsString();
+
+        // Find the positions of [SETTINGS] and [SCRIPT]
+        final settingsStart = originalContent.indexOf('[SETTINGS]');
+        final scriptStart = originalContent.indexOf('[SCRIPT]');
+
+        if (settingsStart == -1 || scriptStart == -1) {
+          throw Exception(
+            'Invalid .loli config format: missing [SETTINGS] or [SCRIPT] sections',
+          );
+        }
+
+        // Extract the script section to preserve it
+        final scriptSection = originalContent.substring(scriptStart);
+
+        final settingsJson = JsonEncoder.withIndent(
+          '  ',
+        ).convert(updatedSettings);
+
+        // Reconstruct the file content
+        final newContent = '[SETTINGS]\n$settingsJson\n\n$scriptSection';
+
+        // Write the updated content back to the file
+        await file.writeAsString(newContent);
       }
-
-      // Extract the script section to preserve it
-      final scriptSection = originalContent.substring(scriptStart);
-
-      // Create updated settings JSON
-      final updatedSettings = widget.config.settings.toJson();
-      final settingsJson = JsonEncoder.withIndent(
-        '  ',
-      ).convert(updatedSettings);
-
-      // Reconstruct the file content
-      final newContent = '[SETTINGS]\n$settingsJson\n\n$scriptSection';
-
-      // Write the updated content back to the file
-      await File(configSummary.filePath).writeAsString(newContent);
 
       if (!mounted) return;
 
