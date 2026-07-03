@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 class WordlistUtils {
@@ -11,8 +12,18 @@ class WordlistUtils {
   }
 
   /// Read a file and return processed data lines using [processContent].
+  ///
+  /// Wordlists/combo files (often breach compilations) are frequently not
+  /// valid UTF-8. Falls back to Latin-1 (which can decode any byte) instead
+  /// of throwing, so a few mojibake lines don't block the whole import.
   static Future<List<String>> readAndProcessFile(File file) async {
-    final content = await file.readAsString();
+    final bytes = await file.readAsBytes();
+    late final String content;
+    try {
+      content = utf8.decode(bytes);
+    } on FormatException {
+      content = latin1.decode(bytes);
+    }
     return processContent(content);
   }
 }
